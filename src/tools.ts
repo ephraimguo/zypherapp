@@ -1,4 +1,4 @@
-import {ZypherAgent} from "@corespeed/zypher"
+import type {ZypherAgent} from "@corespeed/zypher"
 import {
     CopyFileTool,
     DeleteFileTool,

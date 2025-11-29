@@ -16,12 +16,14 @@ import { stdin, stdout } from "node:process";
 // deno-lint-ignore no-import-prefix
 import chalk from "npm:chalk@5.6.2";
 // deno-lint-ignore no-import-prefix
-import {eachValueFrom} from "npm:rxjs-for-await@1.0.0"; // todo
+import {eachValueFrom} from "npm:rxjs-for-await@^1.0.0";
 
-type Prompt = {
+type PromptFn = {
     ask: (question: string) => Promise<string>;
     close: () => void;
 };
+
+let approvalQueue: Promise<void> = Promise.resolve();
 
 export async function startCli(config: RuntimeConfig): Promise<void> {
     const contextOptions: Parameters<typeof createZypherContext>[1] = {};
@@ -67,13 +69,14 @@ export async function startCli(config: RuntimeConfig): Promise<void> {
 
     await registerDefaultTools(agent, config);
 
-    const prompt:Prompt = createCliPrompt()
+    const prompt = createCliPrompt()
 
     agent.loopInterceptor.unregister("tool-execution");
     agent.loopInterceptor.register(
       new ToolExecutionInterceptor(
         agent.mcp,
-        (name, args, options) => handleToolApproval(name, args, config, prompt.ask, options?.signal)
+        (name, args, options) =>
+            handleToolApproval(name, args, config, prompt, options?.signal)
       )
     );
 
@@ -87,7 +90,7 @@ export async function startCli(config: RuntimeConfig): Promise<void> {
 async function runInteractiveLoop(
     agent: ZypherAgent,
     config: RuntimeConfig,
-    prompt: Prompt,
+    prompt: PromptFn,
 ): Promise<void> {
     console.log(chalk.bold("\n+++ Welcome to Zypher Agent CLI +++\n"));
     console.log(`Provider:  ${config.provider}`);
@@ -97,7 +100,6 @@ async function runInteractiveLoop(
     const textEncoder = new TextEncoder();
 
     while(true) {
-        // todo
         const task:string = (await prompt.ask(`Enter your task (or type exit): `)).trim();
 
         if (!task) {
@@ -111,13 +113,10 @@ async function runInteractiveLoop(
 
         console.log(`\nStarting task execution...\n`);
         try {
-            // todo
-            const taskEvents = agent.runTask(task, config.model);
             let isStreamText = true;
             let cancelled = false;
 
-            // todo
-            for await (const event of eachValueFrom(taskEvents)) {
+            for await (const event of eachValueFrom(agent.runTask(task, config.model))) {
                 if (isStreamText && event.type !== "text") {
                     await Deno.stdout.write(textEncoder.encode("\n"));
                     isStreamText = false;
@@ -149,8 +148,8 @@ async function runInteractiveLoop(
             if (isStreamText) {
                 await Deno.stdout.write(textEncoder.encode("\n"));
             }
+            await Deno.stdout.write(textEncoder.encode("\n"));
 
-            await Deno.stdout.write(textEncoder.encode("\n\n"));
             if (!cancelled) {
                 console.log(chalk.green("Task completed successfully!\n"));
             }
@@ -161,7 +160,7 @@ async function runInteractiveLoop(
     }
 }
 
-function createCliPrompt(): Prompt {
+function createCliPrompt(): PromptFn {
     const rl = readline.createInterface({
         input: stdin,
         output: stdout,
@@ -172,34 +171,84 @@ function createCliPrompt(): Prompt {
     };
 }
 
+async function withApprovalLock<T>(fn: () => Promise<T>): Promise<T> {
+    const previous = approvalQueue;
+    let release!: () => void;
+
+    approvalQueue = new Promise<void>((resolve) => {
+        release = resolve
+    });
+
+    try {
+        await previous;
+        return await fn();
+    } finally {
+        release();
+    }
+}
+
 async function handleToolApproval(
     name: string,
     parameters: Record<string, unknown>,
     config: RuntimeConfig,
-    ask: Prompt["ask"],
+    prompt: PromptFn,
     signal?: AbortSignal,
 ): Promise<boolean> {
-    if (config.autoApproveTools) return true;
-    if (!shouldPromptForApproval(name, parameters)) return true;
-
-    console.log(
-        chalk.red(
-            `\n++++ Tool "${name}" requested approval with parameters:\n${
-                JSON.stringify(parameters, null, 2)
-            }\n`,
-        )
-    );
-
-    while (!signal?.aborted) {
-        const answer = (await ask("Approve tool execution? (y/N): "))
-            .trim()
-            .toLowerCase();
-        if (answer === "y" || answer === "yes") return true;
-        if (answer === "n" || answer === "no" || answer === "") return false;
+    if (config.autoApproveTools || !shouldPromptForApproval(name, parameters)) {
+        return true;
     }
 
-    return false;
+    return withApprovalLock(async () => {
+        console.log(
+            chalk.red(
+                `\n++++ Tool "${name}" requested approval with parameters:\n${
+                    JSON.stringify(parameters, null, 2)
+                }\n`,
+            ),
+        );
+
+        while (true) {
+            if (signal?.aborted) return false;
+
+            const answer = (await prompt.ask("Approve tool execution? (y/N): "))
+                .trim()
+                .toLowerCase();
+
+            if (answer === "y" || answer === "yes") return true;
+            if (answer === "n" || answer === "no" || answer === "") return false;
+        }
+    });
 }
+
+// async function handleToolApproval(
+//     name: string,
+//     parameters: Record<string, unknown>,
+//     config: RuntimeConfig,
+//     promptFn: PromptFn,
+//     signal?: AbortSignal,
+// ): Promise<boolean> {
+//     if (config.autoApproveTools || !shouldPromptForApproval(name, parameters)) {
+//         return true;
+//     }
+//
+//     console.log(
+//         chalk.red(
+//             `\nTool: "${name}" requested approval with parameters:\n${
+//                 JSON.stringify(parameters, null, 2)
+//             }\n`,
+//         )
+//     );
+//
+//     while (!signal?.aborted) {
+//         const answer = (await promptFn.ask("Approve tool execution? (y/N): "))
+//             .trim()
+//             .toLowerCase();
+//         if (answer === "y" || answer === "yes") return true;
+//         if (answer === "n" || answer === "no" || answer === "") return false;
+//     }
+//
+//     return false;
+// }
 
 export function shouldPromptForApproval(
     name: string,
