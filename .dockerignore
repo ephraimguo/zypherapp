@@ -1,0 +1,18 @@
+# Ignore git history and configuration
+.git
+.gitignore
+
+# Ignore IDE and editor configuration
+.idea/
+.vscode/
+
+# Ignore environment files and secrets
+#.env
+#.env.*
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore local dependencies (if any)
+node_modules/

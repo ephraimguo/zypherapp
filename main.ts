@@ -1,6 +1,10 @@
 import {buildRuntimeConfig, parseCliArgs} from "./src/config.ts";
 import {printHelp, startCli} from "./src/cli.ts";
 
+import { load } from "jsr:@std/dotenv";
+
+await load({ export: true });
+
 if (import.meta.main) {
     try {
         const cliFlags = parseCliArgs(Deno.args);
