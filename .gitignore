@@ -1,0 +1,39 @@
+# --- Environment & Secrets ---
+# Never commit environment variables or secrets.
+.env
+.env.*
+!.env.example
+
+# --- IDE & Editor ---
+# JetBrains IDEs (IntelliJ, WebStorm, etc.)
+.idea/
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# --- Deno & Node ---
+# Deno's lock file can sometimes be excluded, but it's better to commit it
+# to ensure consistent dependency versions across environments.
+# deno.lock
+
+# In case npm packages are used
+node_modules/
+
+# --- Operating System Files ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Logs & Temporary Files ---
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
