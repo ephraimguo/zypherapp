@@ -1,6 +1,10 @@
 {
   "imports": {
     "@corespeed/zypher": "jsr:@corespeed/zypher@^0.5.2",
-    "rxjs-for-await": "npm:rxjs-for-await@^1.0.0"
+    "rxjs-for-await": "npm:rxjs-for-await@^1.0.0",
+    "@std/dotenv": "jsr:@std/dotenv@^0.225.5"
+  },
+  "tasks": {
+    "start": "deno run --allow-env --allow-run --allow-read --allow-write --allow-net --allow-sys main.ts --workspace ."
   }
 }
